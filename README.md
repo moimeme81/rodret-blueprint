@@ -3,8 +3,8 @@ Control a light with the IKEA Rodret 2-button dimmer.<br />
     - Release = stop dimming<br />
     - Single click ON/OFF = toggle light<br />
 
-⚠️ Requirements:
-    ZHA
+⚠️ Requirements:<br />
+    ZHA (no support for zigbee2mqtt at the moment or ever if you want it and it works then do a pull I'll add it)<br />
     This blueprint requires two helper entities to be created manually:
 
 1. `input_boolean.rodret_dimming_active`
