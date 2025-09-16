@@ -1,0 +1,175 @@
+blueprint:
+  name: IKEA Rodret 2-Button Dimmer (All-in-One)
+  description: |
+    Control a light with the IKEA Rodret 2-button dimmer.
+    - Hold UP/DOWN = dim continuously (direction saved in input_select)
+    - Release = stop dimming
+    - Single click ON/OFF = toggle light
+
+    ⚠️ Requirements:
+    This blueprint requires two helper entities to be created manually:
+
+    1. `input_boolean.rodret_dimming_active`
+    2. `input_select.rodret_hold_direction` with options "up" and "down"
+
+    Add this to your `configuration.yaml`:
+
+    input_boolean:
+      rodret_dimming_active:
+        name: Rodret Dimming Active
+        initial: false
+
+    input_select:
+      rodret_hold_direction:
+        name: Rodret Hold Direction
+        options:
+          - "up"
+          - "down"
+        initial: "up"
+
+  domain: automation
+  source_url: https://raw.githubusercontent.com/moimeme81/rodret-blueprint/main/blueprints/automation/rodret_dimmer.yaml
+  input:
+    remote_device:
+      name: Rodret Remote
+      description: Select your IKEA Rodret remote (ZHA integration).
+      selector:
+        device:
+          integration: zha
+    target_light:
+      name: Light
+      description: The light(s) to control.
+      selector:
+        target:
+          entity:
+            domain: light
+    step_pct:
+      name: Brightness step percentage
+      description: Step percentage for each dimming step.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 50
+          unit_of_measurement: "%"
+          mode: slider
+    delay:
+      name: Delay
+      description: Delay between dimming steps (seconds).
+      default: 0.1
+      selector:
+        number:
+          min: 0.05
+          max: 1
+          step: 0.05
+          unit_of_measurement: s
+          mode: slider
+
+variables:
+  var_light: !input target_light
+  var_step_pct: !input step_pct
+  var_delay: !input delay
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote_device
+      command: move_with_on_off
+    id: dim_up
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote_device
+      command: move
+    id: dim_down
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote_device
+      command: stop_with_on_off
+    id: stop
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote_device
+      command: "on"
+    id: click_on
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote_device
+      command: "off"
+    id: click_off
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: dim_up
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: input_select.rodret_hold_direction
+            data:
+              option: "up"
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.rodret_dimming_active
+          - repeat:
+              while:
+                - condition: state
+                  entity_id: input_boolean.rodret_dimming_active
+                  state: "on"
+              sequence:
+                - service: light.turn_on
+                  target: !input target_light
+                  data:
+                    brightness_step_pct: "{{ var_step_pct }}"
+                    transition: "{{ var_delay }}"
+                - delay: "{{ var_delay }}"
+      - conditions:
+          - condition: trigger
+            id: dim_down
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: input_select.rodret_hold_direction
+            data:
+              option: "down"
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.rodret_dimming_active
+          - repeat:
+              while:
+                - condition: state
+                  entity_id: input_boolean.rodret_dimming_active
+                  state: "on"
+              sequence:
+                - service: light.turn_on
+                  target: !input target_light
+                  data:
+                    brightness_step_pct: "-{{ var_step_pct }}"
+                    transition: "{{ var_delay }}"
+                - delay: "{{ var_delay }}"
+      - conditions:
+          - condition: trigger
+            id: stop
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.rodret_dimming_active
+      - conditions:
+          - condition: trigger
+            id: click_on
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+      - conditions:
+          - condition: trigger
+            id: click_off
+        sequence:
+          - service: light.turn_off
+            target: !input target_light
+
+mode: parallel
